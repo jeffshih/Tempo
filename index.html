@@ -1,0 +1,609 @@
+```html
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Metronome</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        studio: {
+                            bg: '#0c0e12',
+                            card: '#15181e',
+                            border: '#232730',
+                            accent: '#3b82f6'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Range Slider for Pro Hardware Aesthetic */
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-webkit-slider-runnable-track {
+            height: 6px;
+            border-radius: 999px;
+            background: #232730;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 22px;
+            width: 22px;
+            border-radius: 50%;
+            background: #f8fafc;
+            border: 3px solid #3b82f6;
+            margin-top: -8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+            transition: transform 0.1s ease;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+        }
+
+        input[type="range"]::-webkit-slider-thumb:active {
+            transform: scale(0.95);
+        }
+
+        /* Prevent mobile double-tap zoom and text selection */
+        button {
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .pendulum-track {
+            background: linear-gradient(90deg, rgba(35,39,48,0.4) 0%, rgba(59,130,246,0.12) 50%, rgba(35,39,48,0.4) 100%);
+        }
+    </style>
+</head>
+<body class="bg-studio-bg text-slate-100 min-h-screen flex flex-col items-center justify-center p-4 selection:bg-blue-500/30">
+
+    <!-- Main Metronome Hardware Unit -->
+    <main class="w-full max-w-sm bg-studio-card border border-studio-border rounded-3xl p-6 sm:p-8 shadow-2xl">
+        
+        <!-- Header: Minimal Status & Time Signature -->
+        <header class="flex items-center justify-between mb-7">
+            <div class="flex items-center gap-2">
+                <span id="powerIndicator" class="w-2 h-2 rounded-full bg-slate-600 transition-colors duration-300"></span>
+                <span class="text-xs font-semibold tracking-widest uppercase text-slate-400">Metronome</span>
+            </div>
+            
+            <!-- Time Signature Selector (4/4, 3/4, 2/4) -->
+            <div class="flex items-center bg-studio-bg border border-studio-border rounded-xl p-1">
+                <button data-ts="4" class="ts-btn px-2.5 py-1 text-xs font-mono font-bold rounded-lg bg-slate-700 text-white transition">4/4</button>
+                <button data-ts="3" class="ts-btn px-2.5 py-1 text-xs font-mono font-bold rounded-lg text-slate-400 hover:text-white transition">3/4</button>
+                <button data-ts="2" class="ts-btn px-2.5 py-1 text-xs font-mono font-bold rounded-lg text-slate-400 hover:text-white transition">2/4</button>
+            </div>
+        </header>
+
+        <!-- Synchronized Beat LEDs -->
+        <div id="beatLedsContainer" class="flex items-center justify-center gap-4 mb-6 h-7">
+            <!-- Dynamically populated LEDs -->
+        </div>
+
+        <!-- Smooth Sweeping Pendulum Track -->
+        <div class="w-full h-2.5 pendulum-track border border-studio-border rounded-full mb-8 relative overflow-hidden">
+            <div id="pendulumMarker" class="w-7 h-full bg-blue-500 rounded-full shadow-[0_0_12px_rgba(59,130,246,0.85)] absolute top-0 left-1/2 -translate-x-1/2 will-change-transform"></div>
+        </div>
+
+        <!-- Central BPM Readout -->
+        <div class="text-center mb-6 select-none">
+            <div id="bpmDisplay" class="font-mono text-7xl sm:text-8xl font-extrabold tracking-tight text-white leading-none">120</div>
+            <div class="mt-2 flex items-center justify-center gap-2 text-xs font-medium text-slate-400">
+                <span class="tracking-widest uppercase font-bold text-slate-500">BPM</span>
+                <span>•</span>
+                <span id="tempoMarking">Allegro</span>
+            </div>
+        </div>
+
+        <!-- Coarse & Fine Adjustment Controls -->
+        <div class="grid grid-cols-4 gap-2 mb-5">
+            <button id="btnMinus5" class="bg-studio-bg hover:bg-slate-800 active:scale-95 border border-studio-border rounded-2xl py-2.5 font-mono text-xs font-bold text-slate-400 hover:text-white transition">
+                -5
+            </button>
+            <button id="btnMinus1" class="bg-studio-bg hover:bg-slate-800 active:scale-95 border border-studio-border rounded-2xl py-2.5 font-mono text-base font-bold text-white transition">
+                -1
+            </button>
+            <button id="btnPlus1" class="bg-studio-bg hover:bg-slate-800 active:scale-95 border border-studio-border rounded-2xl py-2.5 font-mono text-base font-bold text-white transition">
+                +1
+            </button>
+            <button id="btnPlus5" class="bg-studio-bg hover:bg-slate-800 active:scale-95 border border-studio-border rounded-2xl py-2.5 font-mono text-xs font-bold text-slate-400 hover:text-white transition">
+                +5
+            </button>
+        </div>
+
+        <!-- Tempo Range Slider (40 - 220 BPM) -->
+        <div class="mb-8 px-1">
+            <input type="range" id="bpmSlider" min="40" max="220" value="120" class="w-full">
+            <div class="flex justify-between text-[10px] font-mono text-slate-500 mt-1.5">
+                <span>40</span>
+                <span>100</span>
+                <span>160</span>
+                <span>220</span>
+            </div>
+        </div>
+
+        <!-- Primary Controls: Tap Tempo & Start/Stop -->
+        <div class="grid grid-cols-3 gap-3">
+            <button id="btnTap" class="col-span-1 bg-studio-bg hover:bg-slate-800 active:scale-95 border border-studio-border rounded-2xl py-4 flex flex-col items-center justify-center gap-0.5 transition">
+                <span class="text-xs font-bold tracking-wider uppercase text-slate-200">TAP</span>
+                <span class="text-[10px] text-slate-500">Tempo</span>
+            </button>
+
+            <button id="btnPlayStop" class="col-span-2 bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white rounded-2xl py-4 flex items-center justify-center gap-2.5 font-bold text-base tracking-wide shadow-lg shadow-blue-600/25 transition">
+                <svg id="iconPlay" class="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z"/>
+                </svg>
+                <svg id="iconStop" class="w-5 h-5 fill-current hidden" viewBox="0 0 24 24">
+                    <path d="M6 6h12v12H6z"/>
+                </svg>
+                <span id="playStopText">START</span>
+            </button>
+        </div>
+    </main>
+
+    <script>
+        /**
+         * ============================================================================
+         * PRECISION WEB AUDIO METRONOME + AUTOMATIC DRIFT & RETURN ENGINE
+         * ----------------------------------------------------------------------------
+         * Architecture:
+         * 1. Chris Wilson's Lookahead Scheduler ensures zero-jitter audio scheduling.
+         * 2. Visual animations (pendulum + LEDs) strictly follow the scheduled audio
+         *    timestamps so audio and visuals never decouple.
+         * 3. Autonomous State Machine cycles seamlessly between:
+         *    - TRUST / ACCURATE PHASE (4-8 bars): 100% locked to displayBpm.
+         *    - DRIFT PHASE (1-2 cycles): Smoothly slews (-6% to +7%) at imperceptible
+         *      per-beat increments (0.35 - 0.60 BPM/beat) and holds for 2-5 bars.
+         *    - RETURN PHASE: Smoothly slews back to 100% exact displayBpm and locks
+         *      for 4-8 bars so anyone checking with a reference tuner/app sees it
+         *      is completely accurate.
+         * ============================================================================
+         */
+
+        const state = {
+            isPlaying: false,
+            displayBpm: 120,        // The BPM shown on screen (40 - 220)
+            actualBpm: 120.0,       // The true internal BPM driving the audio clock
+            beatsPerBar: 4,         // Time signature numerator (4, 3, or 2)
+            currentBeatInBar: 0,    // 0-indexed beat within current measure
+            totalBeatsElapsed: 0,   // Total beats since playback started
+
+            // Web Audio API Lookahead Scheduler
+            audioCtx: null,
+            lookaheadMs: 25.0,
+            scheduleAheadTime: 0.1,
+            nextNoteTime: 0.0,
+            schedulerTimerId: null,
+
+            // Visual Sync Queue
+            notesInQueue: [],
+            currentBeatStartTime: 0,
+            currentBeatDuration: 0.5,
+
+            // Tap Tempo history
+            tapTimes: [],
+
+            // Autonomous Drift & Return State Machine
+            engine: {
+                phase: 'ACCURATE',      // 'ACCURATE' | 'DRIFTING' | 'RETURNING'
+                targetBpm: 120.0,       // Current target BPM
+                slewPerBeat: 0.45,      // Max BPM change per beat (0.35 - 0.60)
+                holdBeatsRemaining: 0,  // Beats to stay at target once reached
+                driftsRemainingInCycle: 1 // Number of random drifts before returning to exact BPM
+            }
+        };
+
+        // --- Cached DOM Elements ---
+        const el = {
+            powerIndicator: document.getElementById('powerIndicator'),
+            beatLedsContainer: document.getElementById('beatLedsContainer'),
+            pendulumMarker: document.getElementById('pendulumMarker'),
+            bpmDisplay: document.getElementById('bpmDisplay'),
+            tempoMarking: document.getElementById('tempoMarking'),
+            bpmSlider: document.getElementById('bpmSlider'),
+            btnMinus5: document.getElementById('btnMinus5'),
+            btnMinus1: document.getElementById('btnMinus1'),
+            btnPlus1: document.getElementById('btnPlus1'),
+            btnPlus5: document.getElementById('btnPlus5'),
+            btnTap: document.getElementById('btnTap'),
+            btnPlayStop: document.getElementById('btnPlayStop'),
+            playStopText: document.getElementById('playStopText'),
+            iconPlay: document.getElementById('iconPlay'),
+            iconStop: document.getElementById('iconStop'),
+            tsBtns: document.querySelectorAll('.ts-btn')
+        };
+
+        // --- Utility: Random Integer [min, max] & Float [min, max) ---
+        function randInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        function randFloat(min, max) {
+            return Math.random() * (max - min) + min;
+        }
+
+        // --- Classical Tempo Marking Lookup ---
+        function getTempoMarking(bpm) {
+            if (bpm < 60) return 'Largo';
+            if (bpm < 66) return 'Larghetto';
+            if (bpm < 76) return 'Adagio';
+            if (bpm < 108) return 'Andante';
+            if (bpm < 120) return 'Moderato';
+            if (bpm < 156) return 'Allegro';
+            if (bpm < 176) return 'Vivace';
+            if (bpm < 200) return 'Presto';
+            return 'Prestissimo';
+        }
+
+        // ============================================================================
+        // AUTONOMOUS DRIFT & RETURN ALGORITHM
+        // ============================================================================
+        function resetDriftEngineToAccurate() {
+            state.actualBpm = state.displayBpm;
+            state.engine.phase = 'ACCURATE';
+            state.engine.targetBpm = state.displayBpm;
+            // Stage A: Lock 100% accurately for 4 to 8 bars to build trust
+            state.engine.holdBeatsRemaining = randInt(4, 8) * state.beatsPerBar;
+            // Plan 1 to 2 random drifts before returning to true speed again
+            state.engine.driftsRemainingInCycle = randInt(1, 2);
+        }
+
+        function pickNextDriftTarget() {
+            const base = state.displayBpm;
+            // Random offset between -6% and +7%, avoiding tiny unnoticeable offsets (< 2.5%)
+            const isFaster = Math.random() < 0.52;
+            const pct = isFaster ? randFloat(0.03, 0.07) : -randFloat(0.03, 0.06);
+            const rawTarget = base * (1 + pct);
+
+            state.engine.targetBpm = Math.max(40, Math.min(220, rawTarget));
+            state.engine.slewPerBeat = randFloat(0.35, 0.60);
+            // Once target speed is reached, hold it for 2 to 5 bars
+            state.engine.holdBeatsRemaining = randInt(2, 5) * state.beatsPerBar;
+            state.engine.phase = 'DRIFTING';
+        }
+
+        function startSmoothReturnToAccurate() {
+            state.engine.targetBpm = state.displayBpm;
+            state.engine.slewPerBeat = randFloat(0.35, 0.55);
+            // Once returned to 100% exact displayBpm, stay completely accurate for 4 to 8 bars
+            state.engine.holdBeatsRemaining = randInt(4, 8) * state.beatsPerBar;
+            state.engine.driftsRemainingInCycle = randInt(1, 2);
+            state.engine.phase = 'RETURNING';
+        }
+
+        function advanceDriftEngineOneBeat() {
+            const eng = state.engine;
+
+            if (eng.phase === 'ACCURATE') {
+                state.actualBpm = state.displayBpm;
+                eng.holdBeatsRemaining--;
+                if (eng.holdBeatsRemaining <= 0) {
+                    pickNextDriftTarget();
+                }
+                return;
+            }
+
+            if (eng.phase === 'DRIFTING') {
+                const diff = eng.targetBpm - state.actualBpm;
+                if (Math.abs(diff) > eng.slewPerBeat) {
+                    // Imperceptible gradual transition toward drifted tempo
+                    state.actualBpm += Math.sign(diff) * eng.slewPerBeat;
+                } else {
+                    // Reached drifted target; hold steady at this wrong tempo
+                    state.actualBpm = eng.targetBpm;
+                    eng.holdBeatsRemaining--;
+                    if (eng.holdBeatsRemaining <= 0) {
+                        eng.driftsRemainingInCycle--;
+                        if (eng.driftsRemainingInCycle > 0) {
+                            // Perform a second random drift before returning
+                            pickNextDriftTarget();
+                        } else {
+                            // Smoothly return back to 100% accurate BPM
+                            startSmoothReturnToAccurate();
+                        }
+                    }
+                }
+                return;
+            }
+
+            if (eng.phase === 'RETURNING') {
+                const diff = state.displayBpm - state.actualBpm;
+                if (Math.abs(diff) > eng.slewPerBeat) {
+                    // Imperceptible gradual transition back to true tempo
+                    state.actualBpm += Math.sign(diff) * eng.slewPerBeat;
+                } else {
+                    // Locked back onto 100% exact displayBpm
+                    state.actualBpm = state.displayBpm;
+                    eng.phase = 'ACCURATE';
+                    eng.holdBeatsRemaining--;
+                }
+            }
+        }
+
+        // ============================================================================
+        // WEB AUDIO API SYNTHESIS & LOOKAHEAD SCHEDULER
+        // ============================================================================
+        function initAudioContext() {
+            if (!state.audioCtx) {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                state.audioCtx = new AudioCtx();
+            }
+            if (state.audioCtx.state === 'suspended') {
+                state.audioCtx.resume();
+            }
+        }
+
+        function playWoodblockClick(beatNumber, time) {
+            const ctx = state.audioCtx;
+            if (!ctx) return;
+
+            const isAccent = (beatNumber === 0);
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            // Crisp woodblock synthesis: Beat 1 at 1000Hz, other beats at 750Hz
+            osc.type = 'sine';
+            const baseFreq = isAccent ? 1000 : 750;
+            osc.frequency.setValueAtTime(baseFreq, time);
+            osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.55, time + 0.032);
+
+            // Tight percussive envelope
+            gain.gain.setValueAtTime(0.001, time);
+            gain.gain.linearRampToValueAtTime(isAccent ? 0.85 : 0.6, time + 0.003);
+            gain.gain.exponentialRampToValueAtTime(0.001, time + 0.042);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start(time);
+            osc.stop(time + 0.045);
+        }
+
+        function scheduleNote(beatNumber, time) {
+            const secondsPerBeat = 60.0 / state.actualBpm;
+
+            // Queue visual event synced to exact audio timestamp
+            state.notesInQueue.push({
+                note: beatNumber,
+                time: time,
+                duration: secondsPerBeat,
+                beatIndex: state.totalBeatsElapsed
+            });
+
+            playWoodblockClick(beatNumber, time);
+        }
+
+        function nextNote() {
+            const secondsPerBeat = 60.0 / state.actualBpm;
+            state.nextNoteTime += secondsPerBeat;
+
+            state.currentBeatInBar = (state.currentBeatInBar + 1) % state.beatsPerBar;
+            state.totalBeatsElapsed++;
+
+            // Update internal BPM for the upcoming beat via the drift engine
+            advanceDriftEngineOneBeat();
+        }
+
+        function scheduler() {
+            while (state.nextNoteTime < state.audioCtx.currentTime + state.scheduleAheadTime) {
+                scheduleNote(state.currentBeatInBar, state.nextNoteTime);
+                nextNote();
+            }
+            state.schedulerTimerId = setTimeout(scheduler, state.lookaheadMs);
+        }
+
+        // ============================================================================
+        // SYNCHRONIZED VISUAL ENGINE (LEDs + Pendulum)
+        // ============================================================================
+        let currentVisualBeatIndex = 0;
+
+        function renderBeatLeds() {
+            el.beatLedsContainer.innerHTML = '';
+            for (let i = 0; i < state.beatsPerBar; i++) {
+                const led = document.createElement('div');
+                led.className = 'beat-led w-4 h-4 rounded-full bg-studio-bg border-2 border-studio-border transition-transform duration-75';
+                el.beatLedsContainer.appendChild(led);
+            }
+        }
+
+        function highlightBeatLed(beatInBar) {
+            const leds = el.beatLedsContainer.querySelectorAll('.beat-led');
+            leds.forEach((led, idx) => {
+                if (idx === beatInBar) {
+                    if (idx === 0) {
+                        // Beat 1 Accent (Warm Amber)
+                        led.className = 'beat-led w-5 h-5 rounded-full bg-amber-400 border-2 border-amber-200 shadow-[0_0_14px_rgba(251,191,36,0.9)] scale-110 transition-transform duration-75';
+                    } else {
+                        // Standard Beats (Emerald)
+                        led.className = 'beat-led w-4 h-4 rounded-full bg-emerald-400 border-2 border-emerald-200 shadow-[0_0_12px_rgba(52,211,153,0.8)] scale-105 transition-transform duration-75';
+                    }
+                } else {
+                    led.className = 'beat-led w-4 h-4 rounded-full bg-studio-bg border-2 border-studio-border transition-transform duration-75';
+                }
+            });
+        }
+
+        function resetVisuals() {
+            const leds = el.beatLedsContainer.querySelectorAll('.beat-led');
+            leds.forEach(led => {
+                led.className = 'beat-led w-4 h-4 rounded-full bg-studio-bg border-2 border-studio-border transition-transform duration-75';
+            });
+            el.pendulumMarker.style.left = '50%';
+            el.pendulumMarker.style.transform = 'translateX(-50%)';
+        }
+
+        function updateVisuals() {
+            if (!state.isPlaying) return;
+
+            const currentTime = state.audioCtx.currentTime;
+
+            while (state.notesInQueue.length && state.notesInQueue[0].time <= currentTime) {
+                const noteEvent = state.notesInQueue.shift();
+                state.currentBeatStartTime = noteEvent.time;
+                state.currentBeatDuration = noteEvent.duration;
+                currentVisualBeatIndex = noteEvent.beatIndex;
+
+                highlightBeatLed(noteEvent.note);
+            }
+
+            // Smooth pendulum sweep strictly matching the true beat duration
+            if (state.currentBeatDuration > 0) {
+                const elapsed = Math.max(0, currentTime - state.currentBeatStartTime);
+                const progress = Math.min(1, elapsed / state.currentBeatDuration);
+                const isEvenBeat = (currentVisualBeatIndex % 2 === 0);
+
+                // Natural harmonic pendulum easing
+                const eased = 0.5 - 0.5 * Math.cos(progress * Math.PI);
+                const posPercent = isEvenBeat ? (eased * 100) : ((1 - eased) * 100);
+
+                el.pendulumMarker.style.left = `calc(${posPercent}% - ${(posPercent / 100) * 28}px)`;
+                el.pendulumMarker.style.transform = 'none';
+            }
+
+            requestAnimationFrame(updateVisuals);
+        }
+
+        // ============================================================================
+        // USER INTERACTION HANDLERS
+        // ============================================================================
+        function setDisplayBpm(newBpm) {
+            const clamped = Math.max(40, Math.min(220, Math.round(newBpm)));
+            state.displayBpm = clamped;
+            el.bpmDisplay.textContent = clamped;
+            el.bpmSlider.value = clamped;
+            el.tempoMarking.textContent = getTempoMarking(clamped);
+
+            // Reset drift engine to build trust again whenever user changes tempo
+            resetDriftEngineToAccurate();
+        }
+
+        function togglePlay() {
+            initAudioContext();
+            state.isPlaying = !state.isPlaying;
+
+            if (state.isPlaying) {
+                state.currentBeatInBar = 0;
+                state.totalBeatsElapsed = 0;
+                state.notesInQueue = [];
+                resetDriftEngineToAccurate();
+                state.nextNoteTime = state.audioCtx.currentTime + 0.05;
+
+                // Update UI to active state
+                el.btnPlayStop.classList.remove('bg-blue-600', 'hover:bg-blue-500', 'shadow-blue-600/25');
+                el.btnPlayStop.classList.add('bg-rose-600', 'hover:bg-rose-500', 'shadow-rose-600/25');
+                el.playStopText.textContent = 'STOP';
+                el.iconPlay.classList.add('hidden');
+                el.iconStop.classList.remove('hidden');
+                el.powerIndicator.classList.remove('bg-slate-600');
+                el.powerIndicator.classList.add('bg-emerald-400', 'shadow-[0_0_8px_rgba(52,211,153,0.8)]');
+
+                scheduler();
+                requestAnimationFrame(updateVisuals);
+            } else {
+                clearTimeout(state.schedulerTimerId);
+                resetDriftEngineToAccurate();
+
+                // Update UI to idle state
+                el.btnPlayStop.classList.add('bg-blue-600', 'hover:bg-blue-500', 'shadow-blue-600/25');
+                el.btnPlayStop.classList.remove('bg-rose-600', 'hover:bg-rose-500', 'shadow-rose-600/25');
+                el.playStopText.textContent = 'START';
+                el.iconPlay.classList.remove('hidden');
+                el.iconStop.classList.add('hidden');
+                el.powerIndicator.classList.add('bg-slate-600');
+                el.powerIndicator.classList.remove('bg-emerald-400', 'shadow-[0_0_8px_rgba(52,211,153,0.8)]');
+
+                resetVisuals();
+            }
+        }
+
+        function handleTapTempo() {
+            const now = performance.now();
+            if (state.tapTimes.length > 0 && (now - state.tapTimes[state.tapTimes.length - 1]) > 2000) {
+                state.tapTimes = [];
+            }
+            state.tapTimes.push(now);
+            if (state.tapTimes.length > 5) {
+                state.tapTimes.shift();
+            }
+
+            if (state.tapTimes.length >= 2) {
+                let intervals = [];
+                for (let i = 1; i < state.tapTimes.length; i++) {
+                    intervals.push(state.tapTimes[i] - state.tapTimes[i - 1]);
+                }
+                const avgMs = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+                setDisplayBpm(Math.round(60000 / avgMs));
+            }
+
+            el.btnTap.classList.add('border-blue-500', 'bg-slate-800');
+            setTimeout(() => {
+                el.btnTap.classList.remove('border-blue-500', 'bg-slate-800');
+            }, 120);
+        }
+
+        // --- Event Listeners ---
+        el.btnPlayStop.addEventListener('click', togglePlay);
+        el.btnTap.addEventListener('click', handleTapTempo);
+
+        el.bpmSlider.addEventListener('input', (e) => setDisplayBpm(e.target.value));
+        el.btnMinus5.addEventListener('click', () => setDisplayBpm(state.displayBpm - 5));
+        el.btnMinus1.addEventListener('click', () => setDisplayBpm(state.displayBpm - 1));
+        el.btnPlus1.addEventListener('click', () => setDisplayBpm(state.displayBpm + 1));
+        el.btnPlus5.addEventListener('click', () => setDisplayBpm(state.displayBpm + 5));
+
+        el.tsBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                el.tsBtns.forEach(b => {
+                    b.classList.remove('bg-slate-700', 'text-white');
+                    b.classList.add('text-slate-400');
+                });
+                btn.classList.add('bg-slate-700', 'text-white');
+                btn.classList.remove('text-slate-400');
+
+                state.beatsPerBar = parseInt(btn.dataset.ts, 10);
+                state.currentBeatInBar = 0;
+                renderBeatLeds();
+            });
+        });
+
+        // Spacebar shortcut for Start/Stop
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                togglePlay();
+            }
+        });
+
+        // Initialize Default UI
+        renderBeatLeds();
+    </script>
+</body>
+</html>
+```
